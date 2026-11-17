@@ -198,6 +198,12 @@ section[id]{scroll-margin-top:74px}
   .tl-dot{left:5px}
   .tl-body h3{font-size:15px}
 }
+
+.longshot{cursor:zoom-in}
+.longshot.expanded{cursor:default}
+.collapse-fab{position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(10px);z-index:60;display:inline-flex;align-items:center;gap:8px;padding:10px 20px;border:1px solid rgba(169,139,84,.5);border-radius:999px;background:rgba(10,15,13,.62);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);color:#EDE7D6;font-family:var(--sans);font-size:11.5px;letter-spacing:.18em;cursor:pointer;opacity:0;pointer-events:none;transition:opacity .3s,transform .3s}
+.collapse-fab.on{opacity:1;pointer-events:auto;transform:translateX(-50%) translateY(0)}
+.collapse-fab:hover{border-color:var(--gold);color:var(--gold)}
 </style>
 </head>
 <body>
@@ -521,17 +527,70 @@ section[id]{scroll-margin-top:74px}
     els.forEach(function(e){ e.classList.add('on'); });
   }
 
-  /* 长图：展开 / 收起 */
-  var btns = document.querySelectorAll('.toggle');
-  btns.forEach(function(btn){
+  /* 长图：展开 / 收起（按钮、点图、悬浮收起共用一套状态） */
+  var map = {}, fabTarget = null;
+  document.querySelectorAll('.toggle').forEach(function(b){
+    map[b.dataset.shot] = {btn:b, mask:document.getElementById(b.dataset.mask)};
+  });
+
+  var fab = document.createElement('button');
+  fab.type = 'button';
+  fab.className = 'collapse-fab';
+  fab.textContent = '收起全图 ↑';
+  document.body.appendChild(fab);
+
+  function setState(shot, expanded){
+    var it = map[shot.id] || {};
+    shot.classList.toggle('expanded', expanded);
+    if(it.mask) it.mask.classList.toggle('off', expanded);
+    if(it.btn) it.btn.textContent = expanded ? '收起 ↑' : '展开全图 ↓';
+    if(!expanded) shot.scrollTop = 0;
+    if(expanded){ fabTarget = shot; fab.classList.add('on'); }
+    else if(fabTarget === shot){ fabTarget = null; fab.classList.remove('on'); }
+  }
+
+  /* 收起后把视口留在当前这件作品上，避免跳到别的作品 */
+  function collapseToSection(shot){
+    var sec = shot.closest ? shot.closest('.sec') : null;
+    if(!sec){ setState(shot, false); return; }
+    var y = sec.offsetTop - 74;
+    if(y < 0) y = 0;
+    /* 收起：临时关掉平滑滚动与滚动锚定，等重排完成后再定位回本作品，避免视口跳到别的作品 */
+    var html = document.documentElement;
+    html.style.scrollBehavior = 'auto';
+    html.style.overflowAnchor = 'none';
+    setState(shot, false);
+    void html.offsetHeight;
+    requestAnimationFrame(function(){
+      window.scrollTo(0, y);
+      requestAnimationFrame(function(){
+        setTimeout(function(){ html.style.scrollBehavior = ''; html.style.overflowAnchor = ''; }, 60);
+      });
+    });
+  }
+
+  /* 底部按钮 */
+  document.querySelectorAll('.toggle').forEach(function(btn){
     btn.addEventListener('click', function(){
       var shot = document.getElementById(btn.dataset.shot);
-      var mask = document.getElementById(btn.dataset.mask);
-      var expanded = shot.classList.toggle('expanded');
-      btn.textContent = expanded ? '收起 ↑' : '展开全图 ↓';
-      if(mask) mask.classList.toggle('off', expanded);
-      if(!expanded) shot.scrollTop = 0;
+      if(!shot) return;
+      if(shot.classList.contains('expanded')) collapseToSection(shot);
+      else setState(shot, true);
     });
+  });
+
+  /* 轻点作品图 → 展开全图（手机端手势） */
+  document.querySelectorAll('.longshot').forEach(function(shot){
+    shot.addEventListener('click', function(e){
+      if(e.target && e.target.tagName === 'IMG' && !shot.classList.contains('expanded')){
+        setState(shot, true);
+      }
+    });
+  });
+
+  /* 悬浮「收起全图」 */
+  fab.addEventListener('click', function(){
+    if(fabTarget) collapseToSection(fabTarget);
   });
 
   /* 长图滚到底时淡出底部渐隐 */
